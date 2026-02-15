@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Flappy Bird BMSCE Final</title>
-  <style>
-    body { margin:0; overflow:hidden; }
-    canvas { display:block; margin:auto; }
-  </style>
+<meta charset="UTF-8">
+<title>Flappy Bird Pro</title>
+<style>
+  body { margin:0; overflow:hidden; background:#70c5ce; }
+  canvas { display:block; margin:auto; background:#70c5ce; }
+</style>
 </head>
 <body>
 <canvas id="gameCanvas" width="400" height="600"></canvas>
@@ -15,256 +16,202 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 let frame = 0;
-let gameStarted = false;
+let score = 0;
+let coinScore = 0;
+let gameOver = false;
 let shake = 0;
+let gravityDir = 1;
 
-let score = 0;              // pipes only
-let coinsCollected = 0;     // coin stat
-
-let gravityDirection = 1;
-let gravityTextTimer = 0;
-let nextGravityScore = 15;
+let dashCooldown = 0;
+let dashMax = 60;
 
 const bird = {
   x: 80,
   y: 300,
-  radius: 15,
-  velocity: 0,
+  r: 12,
   gravity: 0.5,
   lift: -8,
-  dashCooldown: 0
+  velocity: 0
 };
 
-const pipes = [];
-const coins = [];
+let pipes = [];
+let coins = [];
 
-const logoImg = new Image();
-logoImg.src = "https://upload.wikimedia.org/wikipedia/en/7/7c/BMS_College_of_Engineering_Logo.png";
-
-document.addEventListener("keydown", (e) => {
-  if (e.code === "Space") {
-    gameStarted = true;
-    bird.velocity = bird.lift * gravityDirection;
-  }
-
-  if (e.code === "ShiftLeft" && bird.dashCooldown <= 0 && gameStarted) {
-    bird.x += 80;
-    bird.dashCooldown = 100;
-  }
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") flap();
+  if (e.code === "ShiftLeft") dash();
 });
+canvas.addEventListener("click", flap);
 
-function isNight() {
-  return frame % 1000 > 500;
+function flap() {
+  if (!gameOver) bird.velocity = bird.lift * gravityDir;
+  else resetGame();
+}
+
+function dash() {
+  if (dashCooldown === 0 && !gameOver) {
+    bird.x += 40;
+    dashCooldown = dashMax;
+  }
+}
+
+function resetGame() {
+  bird.y = 300;
+  bird.velocity = 0;
+  score = 0;
+  coinScore = 0;
+  gravityDir = 1;
+  pipes = [];
+  coins = [];
+  frame = 0;
+  gameOver = false;
 }
 
 function spawnPipe() {
-  const gap = 150;
-  const top = Math.random() * 250 + 50;
-  const bottom = canvas.height - top - gap;
+  let gap = 150;
+  let topHeight = Math.random() * 250 + 50;
 
-  pipes.push({ x: canvas.width, top, bottom, passed:false });
+  pipes.push({
+    x: canvas.width,
+    top: topHeight,
+    bottom: canvas.height - topHeight - gap,
+    passed: false
+  });
 
-  // 🪙 COIN INSIDE PIPE GAP
+  // coin in gap
   coins.push({
-    x: canvas.width + 30,
-    y: top + gap / 2,
+    x: canvas.width + 40,
+    y: topHeight + gap / 2,
     r: 8,
     collected: false
   });
 
-  // 🪙 RANDOM OPEN SPACE COIN (50% chance)
+  // random coin in empty space
   if (Math.random() < 0.5) {
     coins.push({
-      x: canvas.width + 80,
-      y: Math.random() * (canvas.height - 100) + 50,
+      x: canvas.width + 40,
+      y: Math.random() * canvas.height,
       r: 8,
       collected: false
     });
   }
 }
 
-function drawBird() {
-  ctx.beginPath();
-  ctx.fillStyle = bird.dashCooldown > 0 ? "red" : "yellow";
-  ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
-  ctx.fill();
+function crash() {
+  gameOver = true;
+  shake = 10;
 }
 
-function drawPipes() {
-  pipes.forEach(pipe => {
-    ctx.fillStyle = isNight() ? "#8e44ad" : "#2ecc71";
+function update() {
+  frame++;
 
-    ctx.fillRect(pipe.x, 0, 60, pipe.top);
-    ctx.fillRect(pipe.x, canvas.height - pipe.bottom, 60, pipe.bottom);
+  if (frame % 90 === 0) spawnPipe();
 
-    if (logoImg.complete && logoImg.naturalWidth !== 0) {
-      ctx.drawImage(logoImg, pipe.x + 10, pipe.top/2 - 20, 40, 40);
-      ctx.drawImage(
-        logoImg,
-        pipe.x + 10,
-        canvas.height - pipe.bottom + pipe.bottom/2 - 20,
-        40,
-        40
-      );
-    }
-  });
-}
-
-function drawCoins() {
-  coins.forEach(coin => {
-    if (!coin.collected) {
-      ctx.beginPath();
-      ctx.fillStyle = "gold";
-      ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
-}
-
-function updateBird() {
-  if (!gameStarted) return;
-
-  bird.velocity += bird.gravity * gravityDirection;
+  bird.velocity += bird.gravity * gravityDir;
   bird.y += bird.velocity;
 
-  if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) {
-    crash();
-  }
-
-  if (bird.dashCooldown > 0) bird.dashCooldown--;
-}
-
-function updatePipes() {
-  if (!gameStarted) return;
-
-  pipes.forEach(pipe => pipe.x -= 2);
-  coins.forEach(coin => coin.x -= 2);
+  if (bird.y + bird.r > canvas.height || bird.y - bird.r < 0) crash();
 
   pipes.forEach(pipe => {
+    pipe.x -= 3;
 
-    // COLLISION
-    if (
-      bird.x + bird.radius > pipe.x &&
-      bird.x - bird.radius < pipe.x + 60 &&
-      (bird.y - bird.radius < pipe.top ||
-       bird.y + bird.radius > canvas.height - pipe.bottom)
-    ) {
-      crash();
-    }
-
-    // SCORE ONLY FOR PIPES
     if (!pipe.passed && pipe.x + 60 < bird.x) {
       score += 1;
       pipe.passed = true;
-      checkGravityShift();
+
+      if (score % 15 === 0) gravityDir *= -1;
     }
+
+    if (
+      bird.x + bird.r > pipe.x &&
+      bird.x - bird.r < pipe.x + 60 &&
+      (bird.y - bird.r < pipe.top ||
+        bird.y + bird.r > canvas.height - pipe.bottom)
+    ) crash();
   });
 
-  // COIN COLLECTION
   coins.forEach(coin => {
-    const dx = bird.x - coin.x;
-    const dy = bird.y - coin.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    coin.x -= 3;
 
-    if (dist < bird.radius + coin.r && !coin.collected) {
-      coin.collected = true;
-      coinsCollected += 1;
+    if (!coin.collected) {
+      let dx = bird.x - coin.x;
+      let dy = bird.y - coin.y;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < bird.r + coin.r) {
+        coin.collected = true;
+        coinScore++;
+      }
     }
   });
 
-  if (pipes.length && pipes[0].x < -60) {
-    pipes.shift();
-  }
-
-  if (coins.length && coins[0].x < -60) {
-    coins.shift();
-  }
+  if (dashCooldown > 0) dashCooldown--;
 }
 
-function checkGravityShift() {
-  if (score >= nextGravityScore) {
-    gravityDirection *= -1;
-    gravityTextTimer = 90;
-    bird.velocity = 0;
-    nextGravityScore += 15;
-  }
-}
-
-function crash() {
-  shake = 15;
-  resetGame();
-}
-
-function resetGame() {
-  bird.y = 300;
-  bird.velocity = 0;
-  bird.x = 80;
-  pipes.length = 0;
-  coins.length = 0;
-  score = 0;
-  coinsCollected = 0;
-  gravityDirection = 1;
-  gravityTextTimer = 0;
-  nextGravityScore = 15;
-  gameStarted = false;
-}
-
-function drawScore() {
-  ctx.fillStyle = isNight() ? "white" : "black";
-  ctx.font = "18px Arial";
-  ctx.fillText("Score: " + score, 10, 25);
-  ctx.fillText("Coins: " + coinsCollected, 10, 45);
-}
-
-function drawGravityText() {
-  if (gravityTextTimer > 0) {
-    ctx.fillStyle = "red";
-    ctx.font = "22px Arial";
-    ctx.fillText("GRAVITY SHIFT!", 100, 100);
-    gravityTextTimer--;
-  }
-}
-
-function drawStartText() {
-  if (!gameStarted) {
-    ctx.fillStyle = "black";
-    ctx.font = "18px Arial";
-    ctx.fillText("Press SPACE to Start", 110, 300);
-  }
-}
-
-function gameLoop() {
-  frame++;
-
-  canvas.style.background = isNight() ? "#001d3d" : "skyblue";
-
-  ctx.save();
-
+function draw() {
   if (shake > 0) {
-    ctx.translate(Math.random() * 10 - 5, Math.random() * 10 - 5);
+    ctx.save();
+    ctx.translate(Math.random() * shake - shake / 2, Math.random() * shake - shake / 2);
     shake--;
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (gameStarted && frame % 120 === 0) spawnPipe();
+  // pipes
+  ctx.fillStyle = "green";
+  pipes.forEach(pipe => {
+    ctx.fillRect(pipe.x, 0, 60, pipe.top);
+    ctx.fillRect(pipe.x, canvas.height - pipe.bottom, 60, pipe.bottom);
+  });
 
-  updateBird();
-  updatePipes();
+  // coins
+  ctx.fillStyle = "gold";
+  coins.forEach(coin => {
+    if (!coin.collected) {
+      ctx.beginPath();
+      ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
 
-  drawBird();
-  drawPipes();
-  drawCoins();
-  drawScore();
-  drawGravityText();
-  drawStartText();
+  // bird color (dash cooldown)
+  if (dashCooldown > 0) ctx.fillStyle = "red";
+  else ctx.fillStyle = "yellow";
 
-  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(bird.x, bird.y, bird.r, 0, Math.PI * 2);
+  ctx.fill();
 
-  requestAnimationFrame(gameLoop);
+  // UI
+  ctx.fillStyle = "black";
+  ctx.font = "18px Arial";
+  ctx.fillText("Score: " + score, 10, 25);
+  ctx.fillText("Coins: " + coinScore, 10, 50);
+  ctx.fillText(
+    "Gravity: " + (gravityDir === 1 ? "DOWN" : "UP"),
+    10,
+    75
+  );
+
+  if (gameOver) {
+    ctx.fillStyle = "black";
+    ctx.font = "28px Arial";
+    ctx.fillText("Game Over", 120, 280);
+    ctx.font = "16px Arial";
+    ctx.fillText("Click or Press Space to Restart", 70, 320);
+  }
+
+  if (shake > 0) ctx.restore();
 }
 
-gameLoop();
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
 </script>
 </body>
 </html>
+
